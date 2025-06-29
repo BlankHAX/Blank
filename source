@@ -54,12 +54,18 @@ local State = {
         Noclip = false,
         SpeedBoost = false,
         InfiniteJump = false,
-        GodMode = false
+        GodMode = false,
+        FastInteract = false,
+        Fullbright = false,
+        AntiRagdoll = false
     },
     Connections = {
         RunService = nil,
         JumpConnection = nil,
-        ESPConnections = {}
+        ESPConnections = {},
+        FastInteractConnection = nil,
+        FullbrightConnection = nil,
+        AntiRagdollConnection = nil
     },
     Values = {
         Speed = CONFIG.Player.DefaultSpeed,
@@ -189,13 +195,20 @@ end
 function ESPManager.RemoveESP(target, parent)
     if not target then return end
     
-    -- Remove highlight
+    -- Remove highlight from target
     local highlight = target:FindFirstChildOfClass("Highlight")
     if highlight then
         SafeDestroy(highlight)
     end
     
-    -- Remove billboard from target
+    -- Remove all ESPGui from target and its children
+    for _, child in pairs(target:GetDescendants()) do
+        if child.Name == "ESPGui" and child:IsA("BillboardGui") then
+            SafeDestroy(child)
+        end
+    end
+    
+    -- Remove ESPGui from target itself
     local billboard = target:FindFirstChild("ESPGui")
     if billboard then
         SafeDestroy(billboard)
@@ -206,6 +219,13 @@ function ESPManager.RemoveESP(target, parent)
         local parentBillboard = parent:FindFirstChild("ESPGui")
         if parentBillboard then
             SafeDestroy(parentBillboard)
+        end
+        
+        -- Also check parent's children
+        for _, child in pairs(parent:GetChildren()) do
+            if child.Name == "ESPGui" and child:IsA("BillboardGui") then
+                SafeDestroy(child)
+            end
         end
     end
     
@@ -401,6 +421,112 @@ function PlayerManager.SetFOV(fov)
     end
 end
 
+function PlayerManager.SetFastInteract(enabled)
+    State.Player.FastInteract = enabled
+    
+    if enabled then
+        State.Connections.FastInteractConnection = game:GetService("RunService").Heartbeat:Connect(function()
+            local character = game.Players.LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local humanoidRootPart = character.HumanoidRootPart
+                
+                -- Look for doors in the specific Map > Doors structure (excluding escape doors)
+                for _, folder in pairs(game.Workspace:GetChildren()) do
+                    if folder:IsA("Folder") and folder:FindFirstChild("Map") then
+                        local mapFolder = folder.Map
+                        local doorsFolder = mapFolder:FindFirstChild("Doors")
+                        
+                        if doorsFolder then
+                            -- Check all door subfolders (Closet doors, Normal, Sliding, etc.)
+                            for _, doorTypeFolder in pairs(doorsFolder:GetChildren()) do
+                                if doorTypeFolder:IsA("Folder") then
+                                    -- Look through all doors in each subfolder
+                                    for _, doorModel in pairs(doorTypeFolder:GetChildren()) do
+                                        if doorModel:IsA("Model") then
+                                            -- Search for ClickDetector in the door model and its children
+                                            for _, part in pairs(doorModel:GetDescendants()) do
+                                                if part:IsA("ClickDetector") then
+                                                    local distance = (humanoidRootPart.Position - part.Parent.Position).Magnitude
+                                                    if distance <= 15 then -- Within 15 studs for better precision
+                                                        -- Auto-interact with door
+                                                        fireclickdetector(part)
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if State.Connections.FastInteractConnection then
+            State.Connections.FastInteractConnection:Disconnect()
+            State.Connections.FastInteractConnection = nil
+        end
+    end
+end
+
+function PlayerManager.SetFullbright(enabled)
+    State.Player.Fullbright = enabled
+    
+    if enabled then
+        State.Connections.FullbrightConnection = game:GetService("RunService").Heartbeat:Connect(function()
+            game:GetService("Lighting").Brightness = 2
+            game:GetService("Lighting").ClockTime = 14
+            game:GetService("Lighting").FogEnd = 100000
+            game:GetService("Lighting").GlobalShadows = false
+            game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+        end)
+    else
+        if State.Connections.FullbrightConnection then
+            State.Connections.FullbrightConnection:Disconnect()
+            State.Connections.FullbrightConnection = nil
+        end
+        
+        -- Reset lighting to default
+        game:GetService("Lighting").Brightness = 1
+        game:GetService("Lighting").ClockTime = 0
+        game:GetService("Lighting").FogEnd = 100000
+        game:GetService("Lighting").GlobalShadows = true
+        game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(70, 70, 70)
+    end
+end
+
+function PlayerManager.SetAntiRagdoll(enabled)
+    State.Player.AntiRagdoll = enabled
+    
+    if enabled then
+        State.Connections.AntiRagdollConnection = game:GetService("RunService").Heartbeat:Connect(function()
+            local character = game.Players.LocalPlayer.Character
+            if character then
+                local humanoid = character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid.PlatformStand = false
+                    
+                    -- Keep character parts anchored to prevent ragdolling
+                    for _, part in pairs(character:GetChildren()) do
+                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                            local weld = part:FindFirstChild("Motor6D") or part:FindFirstChild("Weld")
+                            if not weld then
+                                part.Anchored = false -- Don't anchor everything, just prevent ragdoll
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if State.Connections.AntiRagdollConnection then
+            State.Connections.AntiRagdollConnection:Disconnect()
+            State.Connections.AntiRagdollConnection = nil
+        end
+    end
+end
+
 -- ========================================
 -- UI CREATION
 -- ========================================
@@ -517,11 +643,41 @@ PlayerTab:CreateSlider({
     Name = "Field of View",
     Range = {30, 120},
     Increment = 1,
-    Suffix = "°",
+    Suffix = "Â°",
     CurrentValue = CONFIG.Player.DefaultFOV,
     Flag = "FOVSlider",
     Callback = function(value)
         PlayerManager.SetFOV(value)
+    end,
+})
+
+-- Fast Interact
+PlayerTab:CreateToggle({
+    Name = "Fast Interact (Doors)",
+    CurrentValue = false,
+    Flag = "FastInteract",
+    Callback = function(value)
+        PlayerManager.SetFastInteract(value)
+    end,
+})
+
+-- Fullbright
+PlayerTab:CreateToggle({
+    Name = "Fullbright",
+    CurrentValue = false,
+    Flag = "Fullbright",
+    Callback = function(value)
+        PlayerManager.SetFullbright(value)
+    end,
+})
+
+-- Anti Ragdoll
+PlayerTab:CreateToggle({
+    Name = "Anti Ragdoll",
+    CurrentValue = false,
+    Flag = "AntiRagdoll",
+    Callback = function(value)
+        PlayerManager.SetAntiRagdoll(value)
     end,
 })
 
@@ -664,6 +820,18 @@ SettingsTab:CreateButton({
         
         if State.Connections.JumpConnection then
             State.Connections.JumpConnection:Disconnect()
+        end
+        
+        if State.Connections.FastInteractConnection then
+            State.Connections.FastInteractConnection:Disconnect()
+        end
+        
+        if State.Connections.FullbrightConnection then
+            State.Connections.FullbrightConnection:Disconnect()
+        end
+        
+        if State.Connections.AntiRagdollConnection then
+            State.Connections.AntiRagdollConnection:Disconnect()
         end
         
         Rayfield:Destroy()
