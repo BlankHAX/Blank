@@ -19,14 +19,14 @@ local CONFIG = {
     },
     ESP = {
         Colors = {
-            Players = Color3.fromRGB(255, 85, 85),    -- Softer red
-            Computer = Color3.fromRGB(255, 195, 77),  -- Warm orange
-            Locker = Color3.fromRGB(100, 149, 237),   -- Cornflower blue
-            BallPit = Color3.fromRGB(255, 215, 0),    -- Gold
-            Escape = Color3.fromRGB(50, 205, 50),     -- Lime green
-            Monster = Color3.fromRGB(138, 43, 226)    -- Blue violet
+            Players = Color3.fromRGB(255, 100, 100),  -- Soft red
+            Computer = Color3.fromRGB(100, 255, 100), -- Soft green  
+            Locker = Color3.fromRGB(100, 150, 255),   -- Soft blue
+            BallPit = Color3.fromRGB(255, 200, 100),  -- Soft orange
+            Escape = Color3.fromRGB(255, 255, 100),   -- Soft yellow
+            Monster = Color3.fromRGB(200, 100, 255)   -- Soft purple
         },
-        UpdateRate = 0.5, -- Slower update for better performance
+        UpdateRate = 0.3, -- Faster update for better cleanup
         MaxDistance = 1000 -- Only show ESP within this distance
     },
     Player = {
@@ -128,20 +128,21 @@ function ESPManager.CreateESP(target, color, text, parent)
     
     -- Create distance billboard
     local billboard = Instance.new("BillboardGui")
-    billboard.Size = UDim2.new(0, 150, 0, 50)
-    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    billboard.Size = UDim2.new(0, 100, 0, 30) -- Smaller text box
+    billboard.StudsOffset = Vector3.new(0, 1.5, 0)
     billboard.AlwaysOnTop = true
     billboard.LightInfluence = 0
+    billboard.Name = "ESPGui"
     billboard.Parent = parent or target
     
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = color
+    textLabel.TextColor3 = Color3.new(1, 1, 1) -- White text for better visibility
     textLabel.TextStrokeTransparency = 0
     textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-    textLabel.TextScaled = true
-    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextSize = 12 -- Fixed smaller text size
+    textLabel.Font = Enum.Font.Gotham
     textLabel.Parent = billboard
     
     -- Enhanced distance update function
@@ -185,7 +186,7 @@ function ESPManager.CreateESP(target, color, text, parent)
     State.Connections.ESPConnections[target] = connection
 end
 
-function ESPManager.RemoveESP(target)
+function ESPManager.RemoveESP(target, parent)
     if not target then return end
     
     -- Remove highlight
@@ -194,10 +195,18 @@ function ESPManager.RemoveESP(target)
         SafeDestroy(highlight)
     end
     
-    -- Remove billboard
-    local billboard = target:FindFirstChild("BillboardGui")
+    -- Remove billboard from target
+    local billboard = target:FindFirstChild("ESPGui")
     if billboard then
         SafeDestroy(billboard)
+    end
+    
+    -- Remove billboard from parent if specified
+    if parent then
+        local parentBillboard = parent:FindFirstChild("ESPGui")
+        if parentBillboard then
+            SafeDestroy(parentBillboard)
+        end
     end
     
     -- Disconnect connection
@@ -232,8 +241,12 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                 end
                 task.wait(CONFIG.ESP.UpdateRate)
             end
-            
-            -- Cleanup when disabled
+        end)
+    end
+    
+    -- Enhanced cleanup when disabled
+    if not enabled then
+        task.spawn(function()
             for _, folder in pairs(game.Workspace:GetChildren()) do
                 if folder:IsA("Folder") and folder:FindFirstChild("Map") then
                     local targetFolder = folder.Map
@@ -245,10 +258,18 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                     if targetFolder then
                         for _, item in pairs(targetFolder:GetChildren()) do
                             if item:IsA("Model") then
-                                ESPManager.RemoveESP(item)
+                                ESPManager.RemoveESP(item, item)
                             end
                         end
                     end
+                end
+            end
+            
+            -- Also clean up any remaining ESP connections for this type
+            for target, connection in pairs(State.Connections.ESPConnections) do
+                if connection and target.Parent == nil then
+                    connection:Disconnect()
+                    State.Connections.ESPConnections[target] = nil
                 end
             end
         end)
