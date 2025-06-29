@@ -420,47 +420,16 @@ function PlayerManager.SetFOV(fov)
         game.Workspace.CurrentCamera.FieldOfView = fov
     end
 end
-
 function PlayerManager.SetFastInteract(enabled)
     State.Player.FastInteract = enabled
     
     if enabled then
-        State.Connections.FastInteractConnection = game:GetService("RunService").Heartbeat:Connect(function()
-            local character = game.Players.LocalPlayer.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                local humanoidRootPart = character.HumanoidRootPart
-                
-                -- Look for doors in the specific Map > Doors structure (excluding escape doors)
-                for _, folder in pairs(game.Workspace:GetChildren()) do
-                    if folder:IsA("Folder") and folder:FindFirstChild("Map") then
-                        local mapFolder = folder.Map
-                        local doorsFolder = mapFolder:FindFirstChild("Doors")
-                        
-                        if doorsFolder then
-                            -- Check all door subfolders (Closet doors, Normal, Sliding, etc.)
-                            for _, doorTypeFolder in pairs(doorsFolder:GetChildren()) do
-                                if doorTypeFolder:IsA("Folder") then
-                                    -- Look through all doors in each subfolder
-                                    for _, doorModel in pairs(doorTypeFolder:GetChildren()) do
-                                        if doorModel:IsA("Model") then
-                                            -- Search for ClickDetector in the door model and its children
-                                            for _, part in pairs(doorModel:GetDescendants()) do
-                                                if part:IsA("ClickDetector") then
-                                                    local distance = (humanoidRootPart.Position - part.Parent.Position).Magnitude
-                                                    if distance <= 15 then -- Within 15 studs for better precision
-                                                        -- Auto-interact with door
-                                                        fireclickdetector(part)
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
+        task.spawn(function()
+            State.Connections.FastInteractConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                for i = 1, 10 do -- Spam 10 times per frame for instant escape
+                    game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"):WaitForChild("Services"):WaitForChild("MonsterService"):WaitForChild("RE"):WaitForChild("Escape"):FireServer()
                 end
-            end
+            end)
         end)
     else
         if State.Connections.FastInteractConnection then
