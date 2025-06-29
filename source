@@ -1,1 +1,542 @@
-P
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Five Nights: Hunted - Script By Blank_lol",
+    Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
+    LoadingTitle = "Five Nights: Hunted",
+    LoadingSubtitle = "Loading.....",
+    Theme = "Default", -- Check https://docs.sirius.menu/rayfield/configuration/themes
+
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false, -- Prevents Rayfield from warning when the script has a version mismatch with the interface
+
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "saver", -- Create a custom folder for your hub/game
+        FileName = "K"
+    },
+
+    Discord = {
+        Enabled = false, -- Prompt the user to join your Discord server if their executor supports it
+        Invite = "noinvitelink", -- The Discord invite code, do not include discord.gg/. E.g. discord.gg/ ABCD would be ABCD
+        RememberJoins = true -- Set this to false to make them join the discord every time they load it up
+    },
+
+    KeySystem = false, -- Set this to true to use our key system
+    KeySettings = {
+        Title = "Untitled",
+        Subtitle = "Key System",
+        Note = "No method of obtaining the key is provided", -- Use this to tell the user how to get a key
+        FileName = "Key", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
+        SaveKey = true, -- The user's key will be saved, but if you change the key, they will be unable to use your script
+        GrabKeyFromSite = false, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
+        Key = {"Hello"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
+    }
+})
+
+Rayfield:Notify({
+    Title = "Script loaded",
+    Content = "V.0.6 - Enhanced",
+    Duration = 2.5,
+    Image = "rewind",
+})
+
+local PlayerTab = Window:CreateTab("Player", "user")
+local EspTab = Window:CreateTab("ESP", "eye")
+local ExploitTab = Window:CreateTab("Exploits", "zap")
+local SettingsTab = Window:CreateTab("Settings", "settings")
+
+-- Variables
+local EspPlayers, EspComputer, EspLocker, EspBallPit, EspEscape, EspMonster = false, false, false, false, false, false
+local ActiveNoclip, ActiveSpeedBoost, InfiniteJump, GodMode = false, false, false, false
+local RunService, JumpConnection, GodModeConnection = nil, nil, nil
+local EspConnections = {}
+
+-- Enhanced ESP System
+local function CreateEsp(Char, Color, Text, Parent)
+    if not Char or not Char.Parent then return end
+    
+    -- Remove existing ESP first
+    RemoveHighlight(Char, Parent)
+    
+    -- Create highlight
+    local NewHighlight = Instance.new("Highlight")
+    NewHighlight.Parent = Char
+    NewHighlight.OutlineColor = Color 
+    NewHighlight.FillColor = Color
+    NewHighlight.FillTransparency = 0.5
+    NewHighlight.OutlineTransparency = 0
+    
+    -- Create text label
+    local BillboardGui = Instance.new("BillboardGui")
+    BillboardGui.Name = "EspLabel"
+    BillboardGui.Size = UDim2.new(0, 120, 0, 40)
+    BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
+    BillboardGui.AlwaysOnTop = true
+    BillboardGui.Parent = Parent or Char
+    
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.TextColor3 = Color
+    TextLabel.TextStrokeTransparency = 0
+    TextLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    TextLabel.TextScaled = true
+    TextLabel.Font = Enum.Font.GothamBold
+    TextLabel.Parent = BillboardGui
+    
+    -- Function to update distance
+    local function UpdateDistance()
+        if not TextLabel.Parent or not game.Players.LocalPlayer.Character then return end
+        
+        local localChar = game.Players.LocalPlayer.Character
+        if not localChar:FindFirstChild("HumanoidRootPart") then return end
+        
+        local playerPos = localChar.HumanoidRootPart.Position
+        local targetPos
+        
+        if Char:FindFirstChild("HumanoidRootPart") then
+            targetPos = Char.HumanoidRootPart.Position
+        elseif Char:FindFirstChild("PrimaryPart") then
+            targetPos = Char.PrimaryPart.Position
+        else
+            for _, part in pairs(Char:GetChildren()) do
+                if part:IsA("BasePart") then
+                    targetPos = part.Position
+                    break
+                end
+            end
+        end
+        
+        if targetPos then
+            local distance = math.floor((playerPos - targetPos).Magnitude)
+            TextLabel.Text = Text .. "\n[" .. distance .. " studs]"
+        else
+            TextLabel.Text = Text
+        end
+    end
+    
+    -- Initial distance update
+    UpdateDistance()
+    
+    -- Store connection for cleanup
+    local connection = game:GetService("RunService").Heartbeat:Connect(UpdateDistance)
+    table.insert(EspConnections, connection)
+    
+    return NewHighlight, BillboardGui
+end
+
+local function RemoveHighlight(Char, Parent)
+    if not Char then return end
+    
+    -- Remove highlight
+    local highlight = Char:FindFirstChildOfClass("Highlight")
+    if highlight then
+        highlight:Destroy()
+    end
+    
+    -- Remove text labels
+    local espLabel = Char:FindFirstChild("EspLabel")
+    if espLabel then
+        espLabel:Destroy()
+    end
+    
+    if Parent then
+        local parentLabel = Parent:FindFirstChild("EspLabel")
+        if parentLabel then
+            parentLabel:Destroy()
+        end
+    end
+end
+
+-- Enhanced ESP Functions
+local function CreateEspLoop(espType, path, color, name)
+    return function()
+        while espType do
+            for _, folder in pairs(game.Workspace:GetChildren()) do 
+                if folder:IsA("Folder") and folder:FindFirstChild("Map") then 
+                    local targetFolder = folder.Map
+                    for _, pathPart in pairs(path) do
+                        targetFolder = targetFolder:FindFirstChild(pathPart)
+                        if not targetFolder then break end
+                    end
+                    
+                    if targetFolder then
+                        for _, item in pairs(targetFolder:GetChildren()) do 
+                            if item:IsA("Model") and not item:FindFirstChildOfClass("Highlight") then 
+                                CreateEsp(item, color, name, item) 
+                            end 
+                        end 
+                    end
+                end
+            end
+            task.wait(0.1)
+        end 
+        
+        -- Cleanup
+        for _, folder in pairs(game.Workspace:GetChildren()) do 
+            if folder:IsA("Folder") and folder:FindFirstChild("Map") then 
+                local targetFolder = folder.Map
+                for _, pathPart in pairs(path) do
+                    targetFolder = targetFolder:FindFirstChild(pathPart)
+                    if not targetFolder then break end
+                end
+                
+                if targetFolder then
+                    for _, item in pairs(targetFolder:GetChildren()) do 
+                        if item:IsA("Model") then
+                            RemoveHighlight(item, item) 
+                        end 
+                    end 
+                end
+            end
+        end 
+    end
+end
+
+-- ESP Toggles
+local EspBallPitToggle = EspTab:CreateToggle({
+    Name = "Ball Pit ESP",
+    CurrentValue = false,
+    Flag = "EspBallPit",
+    Callback = function(Value)
+        EspBallPit = Value 
+        task.spawn(CreateEspLoop(EspBallPit, {"Hooks"}, Color3.fromRGB(255, 176, 0), "Ball Pit"))
+    end,
+})
+
+local EspPlayerToggle = EspTab:CreateToggle({
+    Name = "Players ESP",
+    CurrentValue = false,
+    Flag = "EspPlayer", 
+    Callback = function(Value)
+        EspPlayers = Value 
+        task.spawn(function()
+            while EspPlayers do
+                for _, player in pairs(game:GetService("Players"):GetPlayers()) do 
+                    if player ~= game.Players.LocalPlayer and player.Character and not player.Character:FindFirstChildOfClass("Highlight") then
+                        CreateEsp(player.Character, Color3.fromRGB(255, 0, 0), player.Name, player.Character:FindFirstChild("Head"))
+                    end
+                end
+                task.wait(0.1)
+            end
+            
+            -- Cleanup
+            for _, player in pairs(game:GetService("Players"):GetPlayers()) do 
+                if player.Character then
+                    RemoveHighlight(player.Character, player.Character:FindFirstChild("Head"))
+                end 
+            end 
+        end)
+    end,
+})
+
+local EspComputerToggle = EspTab:CreateToggle({
+    Name = "Computer ESP",
+    CurrentValue = false,
+    Flag = "EspComputer", 
+    Callback = function(Value)
+        EspComputer = Value 
+        task.spawn(CreateEspLoop(EspComputer, {"Tasks"}, Color3.fromRGB(255, 165, 0), "Computer"))
+    end,
+})
+
+local EspLockerToggle = EspTab:CreateToggle({
+    Name = "Locker ESP",
+    CurrentValue = false,
+    Flag = "EspLocker", 
+    Callback = function(Value)
+        EspLocker = Value 
+        task.spawn(CreateEspLoop(EspLocker, {"Lockers"}, Color3.fromRGB(0, 100, 255), "Locker"))
+    end,
+})
+
+local EspEscapeToggle = EspTab:CreateToggle({
+    Name = "Escape Door ESP",
+    CurrentValue = false,
+    Flag = "EspEscape", 
+    Callback = function(Value)
+        EspEscape = Value 
+        task.spawn(CreateEspLoop(EspEscape, {"Escapes"}, Color3.fromRGB(0, 255, 0), "Escape"))
+    end,
+})
+
+-- Monster ESP
+local EspMonsterToggle = EspTab:CreateToggle({
+    Name = "Monster ESP",
+    CurrentValue = false,
+    Flag = "EspMonster",
+    Callback = function(Value)
+        EspMonster = Value
+        task.spawn(function()
+            while EspMonster do
+                for _, npc in pairs(game.Workspace:GetChildren()) do
+                    if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc.Name:lower():find("monster") or npc.Name:lower():find("animatronic") then
+                        if not npc:FindFirstChildOfClass("Highlight") then
+                            CreateEsp(npc, Color3.fromRGB(255, 0, 255), "MONSTER", npc)
+                        end
+                    end
+                end
+                task.wait(0.1)
+            end
+            
+            -- Cleanup
+            for _, npc in pairs(game.Workspace:GetChildren()) do
+                if npc:IsA("Model") and (npc.Name:lower():find("monster") or npc.Name:lower():find("animatronic")) then
+                    RemoveHighlight(npc, npc)
+                end
+            end
+        end)
+    end,
+})
+
+-- Player Modifications
+local NoclipToggle = PlayerTab:CreateToggle({
+    Name = "NoClip",
+    CurrentValue = false,
+    Flag = "NoclipToggle", 
+    Callback = function(Value)
+        ActiveNoclip = Value 
+        
+        if ActiveNoclip then
+            RunService = game:GetService("RunService").Stepped:Connect(function()
+                local character = game.Players.LocalPlayer.Character
+                if character then
+                    for _, v in pairs(character:GetDescendants()) do
+                        if v:IsA("BasePart") then
+                            v.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        else
+            if RunService then
+                RunService:Disconnect()
+                RunService = nil
+            end
+            
+            local character = game.Players.LocalPlayer.Character
+            if character then
+                for _, v in pairs(character:GetDescendants()) do
+                    if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+                        v.CanCollide = true
+                    end
+                end
+            end
+        end
+    end,
+})
+
+local InfiniteJumpToggle = PlayerTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Flag = "InfiniteJump",
+    Callback = function(Value)
+        InfiniteJump = Value
+        
+        if InfiniteJump then
+            JumpConnection = game:GetService("UserInputService").JumpRequest:Connect(function()
+                local character = game.Players.LocalPlayer.Character
+                if character and character:FindFirstChildOfClass("Humanoid") then
+                    character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+                end
+            end)
+        else
+            if JumpConnection then
+                JumpConnection:Disconnect()
+                JumpConnection = nil
+            end
+        end
+    end,
+})
+
+-- God Mode Toggle
+local GodModeToggle = PlayerTab:CreateToggle({
+    Name = "God Mode",
+    CurrentValue = false,
+    Flag = "GodMode",
+    Callback = function(Value)
+        GodMode = Value
+        
+        local character = game.Players.LocalPlayer.Character
+        if not character then return end
+        
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not humanoid then return end
+        
+        if GodMode then
+            -- Enable god mode
+            humanoid.MaxHealth = math.huge
+            humanoid.Health = math.huge
+            
+            -- Protect against health changes
+            GodModeConnection = humanoid.HealthChanged:Connect(function()
+                if GodMode and humanoid.Health < math.huge then
+                    humanoid.Health = math.huge
+                end
+            end)
+            
+            Rayfield:Notify({
+                Title = "God Mode",
+                Content = "Enabled",
+                Duration = 2,
+                Image = "shield",
+            })
+        else
+            -- Disable god mode
+            if GodModeConnection then
+                GodModeConnection:Disconnect()
+                GodModeConnection = nil
+            end
+            
+            humanoid.MaxHealth = 100
+            humanoid.Health = 100
+            
+            Rayfield:Notify({
+                Title = "God Mode",
+                Content = "Disabled",
+                Duration = 2,
+                Image = "shield-off",
+            })
+        end
+    end,
+})
+
+-- FOV Slider
+local FOVSlider = PlayerTab:CreateSlider({
+    Name = "Field of View",
+    Range = {30, 120},
+    Increment = 1,
+    Suffix = "°",
+    CurrentValue = 70,
+    Flag = "FOVSlider",
+    Callback = function(Value)
+        if game.Workspace.CurrentCamera then
+            game.Workspace.CurrentCamera.FieldOfView = Value
+        end
+    end,
+})
+
+-- Speed System
+local ValueSpeed = 16
+
+local PlayerSpeedSlider = PlayerTab:CreateSlider({
+    Name = "Player Speed",
+    Range = {0, 100},
+    Increment = 1,
+    Suffix = " WS",
+    CurrentValue = 16,
+    Flag = "SpeedSlider", 
+    Callback = function(Value)
+        ValueSpeed = Value
+    end,
+})
+
+local PlayerActiveModifyingSpeedToggle = PlayerTab:CreateToggle({
+    Name = "Speed Boost",
+    CurrentValue = false,
+    Flag = "SpeedToggle", 
+    Callback = function(Value)
+        ActiveSpeedBoost = Value 
+        task.spawn(function()
+            while ActiveSpeedBoost do
+                local character = game.Players.LocalPlayer.Character
+                if character and character:FindFirstChild("Humanoid") then
+                    character.Humanoid.WalkSpeed = ValueSpeed
+                end
+                task.wait(0.1)
+            end 
+            
+            -- Reset speed when disabled
+            local character = game.Players.LocalPlayer.Character
+            if character and character:FindFirstChild("Humanoid") then
+                character.Humanoid.WalkSpeed = 16
+            end
+        end)
+    end,
+})
+
+-- Exploit Features
+local TeleportToPlayersButton = ExploitTab:CreateButton({
+    Name = "Teleport to Random Player",
+    Callback = function()
+        local players = game:GetService("Players"):GetPlayers()
+        local randomPlayer = players[math.random(1, #players)]
+        
+        if randomPlayer ~= game.Players.LocalPlayer and randomPlayer.Character and randomPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local localChar = game.Players.LocalPlayer.Character
+            if localChar and localChar:FindFirstChild("HumanoidRootPart") then
+                localChar.HumanoidRootPart.CFrame = randomPlayer.Character.HumanoidRootPart.CFrame
+                Rayfield:Notify({
+                    Title = "Teleported",
+                    Content = "To " .. randomPlayer.Name,
+                    Duration = 2,
+                    Image = "zap",
+                })
+            end
+        end
+    end,
+})
+
+local FullbrightToggle = ExploitTab:CreateToggle({
+    Name = "Fullbright",
+    CurrentValue = false,
+    Flag = "Fullbright",
+    Callback = function(Value)
+        if Value then
+            game:GetService("Lighting").Brightness = 2
+            game:GetService("Lighting").ClockTime = 14
+            game:GetService("Lighting").FogEnd = 100000
+            game:GetService("Lighting").GlobalShadows = false
+            game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+        else
+            game:GetService("Lighting").Brightness = 1
+            game:GetService("Lighting").ClockTime = 12
+            game:GetService("Lighting").FogEnd = 100000
+            game:GetService("Lighting").GlobalShadows = true
+            game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(70, 70, 70)
+        end
+    end,
+})
+
+-- Settings Tab
+local ButtonUnloadCheat = SettingsTab:CreateButton({
+    Name = "Unload Script",
+    Callback = function()
+        -- Cleanup all connections
+        for _, connection in pairs(EspConnections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        
+        if RunService then RunService:Disconnect() end
+        if JumpConnection then JumpConnection:Disconnect() end
+        if GodModeConnection then GodModeConnection:Disconnect() end
+        
+        Rayfield:Destroy()
+    end,
+})
+
+local ButtonRejoinServer = SettingsTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
+    end,
+})
+
+local ButtonCopyDiscord = SettingsTab:CreateButton({
+    Name = "Copy Discord (Placeholder)",
+    Callback = function()
+        setclipboard("https://discord.gg/placeholder")
+        Rayfield:Notify({
+            Title = "Copied",
+            Content = "Discord link copied to clipboard",
+            Duration = 2,
+            Image = "copy",
+        })
+    end,
+})
+
+-- Load configuration
+Rayfield:LoadConfiguration()
