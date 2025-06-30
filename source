@@ -37,13 +37,15 @@ local State = {
     Player = {
         Noclip = false,
         SpeedBoost = false,
-        Fullbright = false
+        Fullbright = false,
+        AntiFailure = false
     },
     Connections = {
         RunService = nil,
         ESPConnections = {},
         PlayerESPConnection = nil,
-        FullbrightConnection = nil
+        FullbrightConnection = nil,
+        AntiFailureConnection = nil
     },
     Values = {
         Speed = CONFIG.Player.DefaultSpeed,
@@ -367,6 +369,37 @@ function PlayerManager.SetFullbright(enabled)
     end
 end
 
+function PlayerManager.SetAntiFailure(enabled)
+    State.Player.AntiFailure = enabled
+    
+    if State.Connections.AntiFailureConnection then
+        State.Connections.AntiFailureConnection:Disconnect()
+        State.Connections.AntiFailureConnection = nil
+    end
+    
+    if enabled then
+        State.Connections.AntiFailureConnection = task.spawn(function()
+            while State.Player.AntiFailure do
+                local args = {
+                    {
+                        Offset = nil,
+                        Notes = {},
+                        Beats = {nil, nil, nil},
+                        InitTick = nil,
+                        Passed = {1, 2, 3},
+                        Stats = {Miss = 0, Perfect = 3}
+                    }
+                }
+                
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Packages.Knit.Services.TaskService.RE.RepairStatus:FireServer(unpack(args))
+                end)
+                task.wait(0.5) -- Send every 0.5 seconds while active
+            end
+        end)
+    end
+end
+
 local Window = Rayfield:CreateWindow({
     Name = CONFIG.UI.Name,
     Icon = CONFIG.UI.Icon,
@@ -403,7 +436,7 @@ local Window = Rayfield:CreateWindow({
 
 Rayfield:Notify({
     Title = "Enhanced Script Loaded",
-    Content = "Version 1.0 - All systems online",
+    Content = "Version 1.2 - Anti-Failure Hack Added",
     Duration = 3,
     Image = "check-circle",
 })
@@ -460,6 +493,15 @@ PlayerTab:CreateToggle({
     Flag = "Fullbright",
     Callback = function(value)
         PlayerManager.SetFullbright(value)
+    end,
+})
+
+PlayerTab:CreateToggle({
+    Name = "Anti-Failure Hack",
+    CurrentValue = false,
+    Flag = "AntiFailure",
+    Callback = function(value)
+        PlayerManager.SetAntiFailure(value)
     end,
 })
 
@@ -591,6 +633,10 @@ SettingsTab:CreateButton({
         
         if State.Connections.FullbrightConnection then
             State.Connections.FullbrightConnection:Disconnect()
+        end
+        
+        if State.Connections.AntiFailureConnection then
+            State.Connections.AntiFailureConnection:Disconnect()
         end
         
         -- Reset player speed
