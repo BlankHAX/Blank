@@ -1,45 +1,30 @@
--- ========================================
--- Five Nights: Hunted - Enhanced Script
--- Author: Blank_lol (Enhanced Version)
--- ========================================
-
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- ========================================
--- CONFIGURATION & CONSTANTS
--- ========================================
 
 local CONFIG = {
     UI = {
-        Name = "Five Nights: Hunted - Enhanced",
+        Name = "Five Nights: Hunted - By BlankHAX",
         LoadingTitle = "Five Nights: Hunted",
-        LoadingSubtitle = "Enhanced Edition Loading...",
-        Theme = "DarkBlue", -- More elegant theme
+        LoadingSubtitle = "Loading...",
+        Theme = "DarkBlue",
         Icon = "shield-check"
     },
     ESP = {
         Colors = {
-            Players = Color3.fromRGB(255, 100, 100),  -- Soft red
-            Computer = Color3.fromRGB(100, 255, 100), -- Soft green  
-            Locker = Color3.fromRGB(100, 150, 255),   -- Soft blue
-            BallPit = Color3.fromRGB(255, 200, 100),  -- Soft orange
-            Escape = Color3.fromRGB(255, 255, 100),   -- Soft yellow
-            Monster = Color3.fromRGB(200, 100, 255)   -- Soft purple
+            Players = Color3.fromRGB(255, 100, 100),
+            Computer = Color3.fromRGB(100, 255, 100),
+            Locker = Color3.fromRGB(100, 150, 255),
+            BallPit = Color3.fromRGB(255, 200, 100),
+            Escape = Color3.fromRGB(255, 255, 100)
         },
-        UpdateRate = 0.3, -- Faster update for better cleanup
-        MaxDistance = 1000 -- Only show ESP within this distance
+        UpdateRate = 0.3,
+        MaxDistance = 1000
     },
     Player = {
         DefaultSpeed = 16,
         MaxSpeed = 50,
-        DefaultFOV = 70,
-        MaxHealth = 100
+        DefaultFOV = 70
     }
 }
-
--- ========================================
--- GLOBAL VARIABLES
--- ========================================
 
 local State = {
     ESP = {
@@ -47,35 +32,24 @@ local State = {
         Computer = false,
         Locker = false,
         BallPit = false,
-        Escape = false,
-        Monster = false
+        Escape = false
     },
     Player = {
         Noclip = false,
         SpeedBoost = false,
-        InfiniteJump = false,
-        GodMode = false,
-        FastInteract = false,
-        Fullbright = false,
-        AntiRagdoll = false
+        Fullbright = false
     },
     Connections = {
         RunService = nil,
-        JumpConnection = nil,
         ESPConnections = {},
-        FastInteractConnection = nil,
-        FullbrightConnection = nil,
-        AntiRagdollConnection = nil
+        PlayerESPConnection = nil,
+        FullbrightConnection = nil
     },
     Values = {
         Speed = CONFIG.Player.DefaultSpeed,
         FOV = CONFIG.Player.DefaultFOV
     }
 }
-
--- ========================================
--- UTILITY FUNCTIONS
--- ========================================
 
 local function SafeDestroy(object)
     if object and object.Parent then
@@ -101,7 +75,6 @@ local function GetTargetPosition(target)
     elseif target:FindFirstChild("PrimaryPart") then
         return target.PrimaryPart.Position
     else
-        -- Find first BasePart
         for _, part in pairs(target:GetChildren()) do
             if part:IsA("BasePart") then
                 return part.Position
@@ -111,19 +84,13 @@ local function GetTargetPosition(target)
     return nil
 end
 
--- ========================================
--- ESP SYSTEM
--- ========================================
-
 local ESPManager = {}
 
 function ESPManager.CreateESP(target, color, text, parent)
     if not target then return end
     
-    -- Remove existing ESP first
     ESPManager.RemoveESP(target)
     
-    -- Create highlight with better visual settings
     local highlight = Instance.new("Highlight")
     highlight.OutlineColor = color
     highlight.FillColor = color
@@ -132,9 +99,8 @@ function ESPManager.CreateESP(target, color, text, parent)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = target
     
-    -- Create distance billboard
     local billboard = Instance.new("BillboardGui")
-    billboard.Size = UDim2.new(0, 100, 0, 30) -- Smaller text box
+    billboard.Size = UDim2.new(0, 100, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 1.5, 0)
     billboard.AlwaysOnTop = true
     billboard.LightInfluence = 0
@@ -144,22 +110,24 @@ function ESPManager.CreateESP(target, color, text, parent)
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.new(1, 1, 1) -- White text for better visibility
+    textLabel.TextColor3 = Color3.new(1, 1, 1)
     textLabel.TextStrokeTransparency = 0
     textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-    textLabel.TextSize = 12 -- Fixed smaller text size
+    textLabel.TextSize = 12
     textLabel.Font = Enum.Font.Gotham
     textLabel.Parent = billboard
     
-    -- Enhanced distance update function
     local function UpdateDistance()
+        if not target.Parent or not billboard.Parent then
+            return false
+        end
+        
         local playerPos = GetPlayerPosition()
         local targetPos = GetTargetPosition(target)
         
         if playerPos and targetPos then
             local distance = GetDistance(playerPos, targetPos)
             
-            -- Hide ESP if too far away
             if distance > CONFIG.ESP.MaxDistance then
                 billboard.Enabled = false
                 highlight.Enabled = false
@@ -168,23 +136,19 @@ function ESPManager.CreateESP(target, color, text, parent)
                 highlight.Enabled = true
                 textLabel.Text = string.format("%s\n[%d studs]", text, distance)
                 
-                -- Dynamic color based on distance
                 local alpha = math.max(0.3, 1 - (distance / CONFIG.ESP.MaxDistance))
                 textLabel.TextTransparency = 1 - alpha
             end
         else
             textLabel.Text = text
         end
+        return true
     end
     
-    -- Initial update
     UpdateDistance()
     
-    -- Store connection for cleanup
     local connection = game:GetService("RunService").Heartbeat:Connect(function()
-        if billboard.Parent and target.Parent then
-            UpdateDistance()
-        else
+        if not UpdateDistance() then
             connection:Disconnect()
         end
     end)
@@ -195,33 +159,28 @@ end
 function ESPManager.RemoveESP(target, parent)
     if not target then return end
     
-    -- Remove highlight from target
     local highlight = target:FindFirstChildOfClass("Highlight")
     if highlight then
         SafeDestroy(highlight)
     end
     
-    -- Remove all ESPGui from target and its children
     for _, child in pairs(target:GetDescendants()) do
         if child.Name == "ESPGui" and child:IsA("BillboardGui") then
             SafeDestroy(child)
         end
     end
     
-    -- Remove ESPGui from target itself
     local billboard = target:FindFirstChild("ESPGui")
     if billboard then
         SafeDestroy(billboard)
     end
     
-    -- Remove billboard from parent if specified
     if parent then
         local parentBillboard = parent:FindFirstChild("ESPGui")
         if parentBillboard then
             SafeDestroy(parentBillboard)
         end
         
-        -- Also check parent's children
         for _, child in pairs(parent:GetChildren()) do
             if child.Name == "ESPGui" and child:IsA("BillboardGui") then
                 SafeDestroy(child)
@@ -229,11 +188,20 @@ function ESPManager.RemoveESP(target, parent)
         end
     end
     
-    -- Disconnect connection
     if State.Connections.ESPConnections[target] then
         State.Connections.ESPConnections[target]:Disconnect()
         State.Connections.ESPConnections[target] = nil
     end
+end
+
+function ESPManager.CleanupAllESP()
+    for target, connection in pairs(State.Connections.ESPConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+        ESPManager.RemoveESP(target)
+    end
+    State.Connections.ESPConnections = {}
 end
 
 function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
@@ -262,10 +230,7 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                 task.wait(CONFIG.ESP.UpdateRate)
             end
         end)
-    end
-    
-    -- Enhanced cleanup when disabled
-    if not enabled then
+    else
         task.spawn(function()
             for _, folder in pairs(game.Workspace:GetChildren()) do
                 if folder:IsA("Folder") and folder:FindFirstChild("Map") then
@@ -285,7 +250,6 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                 end
             end
             
-            -- Also clean up any remaining ESP connections for this type
             for target, connection in pairs(State.Connections.ESPConnections) do
                 if connection and target.Parent == nil then
                     connection:Disconnect()
@@ -296,39 +260,7 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
     end
 end
 
--- ========================================
--- PLAYER FUNCTIONS
--- ========================================
-
 local PlayerManager = {}
-
-function PlayerManager.SetGodMode(enabled)
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    if not character then return end
-    
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    State.Player.GodMode = enabled
-    
-    if enabled then
-        humanoid.MaxHealth = math.huge
-        humanoid.Health = math.huge
-        
-        local connection
-        connection = humanoid.HealthChanged:Connect(function()
-            if State.Player.GodMode then
-                humanoid.Health = math.huge
-            else
-                connection:Disconnect()
-            end
-        end)
-    else
-        humanoid.MaxHealth = CONFIG.Player.MaxHealth
-        humanoid.Health = CONFIG.Player.MaxHealth
-    end
-end
 
 function PlayerManager.SetNoclip(enabled)
     State.Player.Noclip = enabled
@@ -357,27 +289,6 @@ function PlayerManager.SetNoclip(enabled)
                     part.CanCollide = true
                 end
             end
-        end
-    end
-end
-
-function PlayerManager.SetInfiniteJump(enabled)
-    State.Player.InfiniteJump = enabled
-    
-    if enabled then
-        State.Connections.JumpConnection = game:GetService("UserInputService").JumpRequest:Connect(function()
-            local character = game.Players.LocalPlayer.Character
-            if character then
-                local humanoid = character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid:ChangeState("Jumping")
-                end
-            end
-        end)
-    else
-        if State.Connections.JumpConnection then
-            State.Connections.JumpConnection:Disconnect()
-            State.Connections.JumpConnection = nil
         end
     end
 end
@@ -420,24 +331,6 @@ function PlayerManager.SetFOV(fov)
         game.Workspace.CurrentCamera.FieldOfView = fov
     end
 end
-function PlayerManager.SetFastInteract(enabled)
-    State.Player.FastInteract = enabled
-    
-    if enabled then
-        task.spawn(function()
-            State.Connections.FastInteractConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                for i = 1, 10 do -- Spam 10 times per frame for instant escape
-                    game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"):WaitForChild("Services"):WaitForChild("MonsterService"):WaitForChild("RE"):WaitForChild("Escape"):FireServer()
-                end
-            end)
-        end)
-    else
-        if State.Connections.FastInteractConnection then
-            State.Connections.FastInteractConnection:Disconnect()
-            State.Connections.FastInteractConnection = nil
-        end
-    end
-end
 
 function PlayerManager.SetFullbright(enabled)
     State.Player.Fullbright = enabled
@@ -456,7 +349,6 @@ function PlayerManager.SetFullbright(enabled)
             State.Connections.FullbrightConnection = nil
         end
         
-        -- Reset lighting to default
         game:GetService("Lighting").Brightness = 1
         game:GetService("Lighting").ClockTime = 0
         game:GetService("Lighting").FogEnd = 100000
@@ -464,41 +356,6 @@ function PlayerManager.SetFullbright(enabled)
         game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(70, 70, 70)
     end
 end
-
-function PlayerManager.SetAntiRagdoll(enabled)
-    State.Player.AntiRagdoll = enabled
-    
-    if enabled then
-        State.Connections.AntiRagdollConnection = game:GetService("RunService").Heartbeat:Connect(function()
-            local character = game.Players.LocalPlayer.Character
-            if character then
-                local humanoid = character:FindFirstChild("Humanoid")
-                if humanoid then
-                    humanoid.PlatformStand = false
-                    
-                    -- Keep character parts anchored to prevent ragdolling
-                    for _, part in pairs(character:GetChildren()) do
-                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                            local weld = part:FindFirstChild("Motor6D") or part:FindFirstChild("Weld")
-                            if not weld then
-                                part.Anchored = false -- Don't anchor everything, just prevent ragdoll
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-    else
-        if State.Connections.AntiRagdollConnection then
-            State.Connections.AntiRagdollConnection:Disconnect()
-            State.Connections.AntiRagdollConnection = nil
-        end
-    end
-end
-
--- ========================================
--- UI CREATION
--- ========================================
 
 local Window = Rayfield:CreateWindow({
     Name = CONFIG.UI.Name,
@@ -519,7 +376,7 @@ local Window = Rayfield:CreateWindow({
     Discord = {
         Enabled = false,
         Invite = "noinvitelink",
-        RememberJoins = true
+        RememberJoints = true
     },
     
     KeySystem = false,
@@ -534,7 +391,6 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- Startup notification
 Rayfield:Notify({
     Title = "Enhanced Script Loaded",
     Content = "Version 1.0 - All systems online",
@@ -542,29 +398,10 @@ Rayfield:Notify({
     Image = "check-circle",
 })
 
--- ========================================
--- TABS CREATION
--- ========================================
-
 local PlayerTab = Window:CreateTab("Player", "user")
 local ESPTab = Window:CreateTab("ESP", "eye")
 local SettingsTab = Window:CreateTab("Settings", "settings")
 
--- ========================================
--- PLAYER TAB
--- ========================================
-
--- God Mode
-PlayerTab:CreateToggle({
-    Name = "God Mode",
-    CurrentValue = false,
-    Flag = "GodMode",
-    Callback = function(value)
-        PlayerManager.SetGodMode(value)
-    end,
-})
-
--- Noclip
 PlayerTab:CreateToggle({
     Name = "Noclip",
     CurrentValue = false,
@@ -574,17 +411,6 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- Infinite Jump
-PlayerTab:CreateToggle({
-    Name = "Infinite Jump",
-    CurrentValue = false,
-    Flag = "InfiniteJump",
-    Callback = function(value)
-        PlayerManager.SetInfiniteJump(value)
-    end,
-})
-
--- Speed Boost Toggle
 PlayerTab:CreateToggle({
     Name = "Speed Boost",
     CurrentValue = false,
@@ -594,7 +420,6 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- Speed Slider
 PlayerTab:CreateSlider({
     Name = "Walk Speed",
     Range = {0, CONFIG.Player.MaxSpeed},
@@ -607,12 +432,11 @@ PlayerTab:CreateSlider({
     end,
 })
 
--- FOV Slider
 PlayerTab:CreateSlider({
     Name = "Field of View",
     Range = {30, 120},
     Increment = 1,
-    Suffix = "Â°",
+    Suffix = "°",
     CurrentValue = CONFIG.Player.DefaultFOV,
     Flag = "FOVSlider",
     Callback = function(value)
@@ -620,17 +444,6 @@ PlayerTab:CreateSlider({
     end,
 })
 
--- Fast Interact
-PlayerTab:CreateToggle({
-    Name = "Fast Interact (Doors)",
-    CurrentValue = false,
-    Flag = "FastInteract",
-    Callback = function(value)
-        PlayerManager.SetFastInteract(value)
-    end,
-})
-
--- Fullbright
 PlayerTab:CreateToggle({
     Name = "Fullbright",
     CurrentValue = false,
@@ -640,29 +453,20 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- Anti Ragdoll
-PlayerTab:CreateToggle({
-    Name = "Anti Ragdoll",
-    CurrentValue = false,
-    Flag = "AntiRagdoll",
-    Callback = function(value)
-        PlayerManager.SetAntiRagdoll(value)
-    end,
-})
-
--- ========================================
--- ESP TAB
--- ========================================
-
--- Players ESP
 ESPTab:CreateToggle({
     Name = "Players ESP",
     CurrentValue = false,
     Flag = "PlayersESP",
     Callback = function(value)
         State.ESP.Players = value
+        
+        if State.Connections.PlayerESPConnection then
+            State.Connections.PlayerESPConnection:Disconnect()
+            State.Connections.PlayerESPConnection = nil
+        end
+        
         if value then
-            task.spawn(function()
+            State.Connections.PlayerESPConnection = task.spawn(function()
                 while State.ESP.Players do
                     for _, player in pairs(game:GetService("Players"):GetPlayers()) do
                         if player ~= game.Players.LocalPlayer and player.Character and 
@@ -677,19 +481,17 @@ ESPTab:CreateToggle({
                     end
                     task.wait(CONFIG.ESP.UpdateRate)
                 end
-                
-                -- Cleanup
-                for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-                    if player ~= game.Players.LocalPlayer and player.Character then
-                        ESPManager.RemoveESP(player.Character)
-                    end
-                end
             end)
+        else
+            for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+                if player ~= game.Players.LocalPlayer and player.Character then
+                    ESPManager.RemoveESP(player.Character)
+                end
+            end
         end
     end,
 })
 
--- Computer ESP
 ESPTab:CreateToggle({
     Name = "Computer ESP",
     CurrentValue = false,
@@ -699,7 +501,6 @@ ESPTab:CreateToggle({
     end,
 })
 
--- Locker ESP
 ESPTab:CreateToggle({
     Name = "Locker ESP",
     CurrentValue = false,
@@ -709,7 +510,6 @@ ESPTab:CreateToggle({
     end,
 })
 
--- Ball Pit ESP
 ESPTab:CreateToggle({
     Name = "Ball Pit ESP",
     CurrentValue = false,
@@ -719,7 +519,6 @@ ESPTab:CreateToggle({
     end,
 })
 
--- Escape Door ESP
 ESPTab:CreateToggle({
     Name = "Escape Door ESP",
     CurrentValue = false,
@@ -729,7 +528,6 @@ ESPTab:CreateToggle({
     end,
 })
 
--- ESP Settings Section
 ESPTab:CreateSection("ESP Settings")
 
 ESPTab:CreateSlider({
@@ -744,11 +542,6 @@ ESPTab:CreateSlider({
     end,
 })
 
--- ========================================
--- SETTINGS TAB
--- ========================================
-
--- Performance Section
 SettingsTab:CreateSection("Performance")
 
 SettingsTab:CreateSlider({
@@ -763,7 +556,6 @@ SettingsTab:CreateSlider({
     end,
 })
 
--- Control Section
 SettingsTab:CreateSection("Controls")
 
 SettingsTab:CreateButton({
@@ -776,39 +568,22 @@ SettingsTab:CreateButton({
 SettingsTab:CreateButton({
     Name = "Unload Script",
     Callback = function()
-        -- Cleanup all connections
-        for target, connection in pairs(State.Connections.ESPConnections) do
-            if connection then
-                connection:Disconnect()
-            end
-        end
+        ESPManager.CleanupAllESP()
         
         if State.Connections.RunService then
             State.Connections.RunService:Disconnect()
         end
         
-        if State.Connections.JumpConnection then
-            State.Connections.JumpConnection:Disconnect()
-        end
-        
-        if State.Connections.FastInteractConnection then
-            State.Connections.FastInteractConnection:Disconnect()
+        if State.Connections.PlayerESPConnection then
+            pcall(function() task.cancel(State.Connections.PlayerESPConnection) end)
         end
         
         if State.Connections.FullbrightConnection then
             State.Connections.FullbrightConnection:Disconnect()
         end
         
-        if State.Connections.AntiRagdollConnection then
-            State.Connections.AntiRagdollConnection:Disconnect()
-        end
-        
         Rayfield:Destroy()
     end,
 })
-
--- ========================================
--- LOAD CONFIGURATION
--- ========================================
 
 Rayfield:LoadConfiguration()
