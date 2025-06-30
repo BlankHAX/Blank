@@ -2,9 +2,9 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local CONFIG = {
     UI = {
-        Name = "Five Nights: Hunted - Enhanced",
+        Name = "Five Nights: Hunted - Mars HUB",
         LoadingTitle = "Five Nights: Hunted",
-        LoadingSubtitle = "Enhanced Edition Loading...",
+        LoadingSubtitle = "Script Loading...",
         Theme = "DarkBlue",
         Icon = "shield-check"
     },
@@ -489,8 +489,8 @@ local Window = Rayfield:CreateWindow({
 })
 
 Rayfield:Notify({
-    Title = "Enhanced Script Loaded",
-    Content = "Version 1.2 - Anti-Failure Hack Added",
+    Title = "Script Loaded",
+    Content = "Version 1.2",
     Duration = 3,
     Image = "check-circle",
 })
@@ -498,6 +498,7 @@ Rayfield:Notify({
 local PlayerTab = Window:CreateTab("Player", "user")
 local ESPTab = Window:CreateTab("ESP", "eye")
 local SettingsTab = Window:CreateTab("Settings", "settings")
+local DiscordTab = Window:CreateTab("Discord", nil)
 
 PlayerTab:CreateToggle({
     Name = "Noclip",
