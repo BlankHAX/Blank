@@ -2,9 +2,9 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local CONFIG = {
     UI = {
-        Name = "Five Nights: Hunted - By BlankHAX",
+        Name = "Five Nights: Hunted - Enhanced",
         LoadingTitle = "Five Nights: Hunted",
-        LoadingSubtitle = "Loading...",
+        LoadingSubtitle = "Enhanced Edition Loading...",
         Theme = "DarkBlue",
         Icon = "shield-check"
     },
@@ -47,7 +47,8 @@ local State = {
     },
     Values = {
         Speed = CONFIG.Player.DefaultSpeed,
-        FOV = CONFIG.Player.DefaultFOV
+        FOV = CONFIG.Player.DefaultFOV,
+        OriginalWalkSpeed = nil
     }
 }
 
@@ -63,13 +64,15 @@ end
 
 local function GetPlayerPosition()
     local player = game.Players.LocalPlayer
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+    if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         return player.Character.HumanoidRootPart.Position
     end
     return nil
 end
 
 local function GetTargetPosition(target)
+    if not target or not target.Parent then return nil end
+    
     if target:FindFirstChild("HumanoidRootPart") then
         return target.HumanoidRootPart.Position
     elseif target:FindFirstChild("PrimaryPart") then
@@ -87,7 +90,7 @@ end
 local ESPManager = {}
 
 function ESPManager.CreateESP(target, color, text, parent)
-    if not target then return end
+    if not target or not target.Parent then return end
     
     ESPManager.RemoveESP(target)
     
@@ -118,7 +121,7 @@ function ESPManager.CreateESP(target, color, text, parent)
     textLabel.Parent = billboard
     
     local function UpdateDistance()
-        if not target.Parent or not billboard.Parent then
+        if not target or not target.Parent or not billboard.Parent then
             return false
         end
         
@@ -147,9 +150,13 @@ function ESPManager.CreateESP(target, color, text, parent)
     
     UpdateDistance()
     
-    local connection = game:GetService("RunService").Heartbeat:Connect(function()
+    local connection
+    connection = game:GetService("RunService").Heartbeat:Connect(function()
         if not UpdateDistance() then
             connection:Disconnect()
+            if State.Connections.ESPConnections[target] then
+                State.Connections.ESPConnections[target] = nil
+            end
         end
     end)
     
@@ -197,11 +204,16 @@ end
 function ESPManager.CleanupAllESP()
     for target, connection in pairs(State.Connections.ESPConnections) do
         if connection then
-            connection:Disconnect()
+            pcall(function() connection:Disconnect() end)
         end
         ESPManager.RemoveESP(target)
     end
     State.Connections.ESPConnections = {}
+    
+    if State.Connections.PlayerESPConnection then
+        pcall(function() task.cancel(State.Connections.PlayerESPConnection) end)
+        State.Connections.PlayerESPConnection = nil
+    end
 end
 
 function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
@@ -214,7 +226,7 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                     if folder:IsA("Folder") and folder:FindFirstChild("Map") then
                         local targetFolder = folder.Map
                         for _, pathSegment in pairs(searchPath) do
-                            targetFolder = targetFolder:FindFirstChild(pathSegment)
+                            targetFolder = targetFolder and targetFolder:FindFirstChild(pathSegment)
                             if not targetFolder then break end
                         end
                         
@@ -236,7 +248,7 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
                 if folder:IsA("Folder") and folder:FindFirstChild("Map") then
                     local targetFolder = folder.Map
                     for _, pathSegment in pairs(searchPath) do
-                        targetFolder = targetFolder:FindFirstChild(pathSegment)
+                        targetFolder = targetFolder and targetFolder:FindFirstChild(pathSegment)
                         if not targetFolder then break end
                     end
                     
@@ -251,8 +263,8 @@ function ESPManager.UpdateESPType(espType, enabled, searchPath, itemName, color)
             end
             
             for target, connection in pairs(State.Connections.ESPConnections) do
-                if connection and target.Parent == nil then
-                    connection:Disconnect()
+                if connection and (not target or not target.Parent) then
+                    pcall(function() connection:Disconnect() end)
                     State.Connections.ESPConnections[target] = nil
                 end
             end
@@ -264,6 +276,11 @@ local PlayerManager = {}
 
 function PlayerManager.SetNoclip(enabled)
     State.Player.Noclip = enabled
+    
+    if State.Connections.RunService then
+        State.Connections.RunService:Disconnect()
+        State.Connections.RunService = nil
+    end
     
     if enabled then
         State.Connections.RunService = game:GetService("RunService").Stepped:Connect(function()
@@ -277,11 +294,6 @@ function PlayerManager.SetNoclip(enabled)
             end
         end)
     else
-        if State.Connections.RunService then
-            State.Connections.RunService:Disconnect()
-            State.Connections.RunService = nil
-        end
-        
         local character = game.Players.LocalPlayer.Character
         if character then
             for _, part in pairs(character:GetDescendants()) do
@@ -309,19 +321,17 @@ end
 function PlayerManager.SetSpeedBoost(enabled)
     State.Player.SpeedBoost = enabled
     
-    if enabled then
-        task.spawn(function()
-            while State.Player.SpeedBoost do
-                local character = game.Players.LocalPlayer.Character
-                if character then
-                    local humanoid = character:FindFirstChild("Humanoid")
-                    if humanoid then
-                        humanoid.WalkSpeed = State.Values.Speed
-                    end
-                end
-                task.wait(0.1)
+    local character = game.Players.LocalPlayer.Character
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            if enabled then
+                State.Values.OriginalWalkSpeed = humanoid.WalkSpeed
+                humanoid.WalkSpeed = State.Values.Speed
+            else
+                humanoid.WalkSpeed = State.Values.OriginalWalkSpeed or CONFIG.Player.DefaultSpeed
             end
-        end)
+        end
     end
 end
 
@@ -335,6 +345,11 @@ end
 function PlayerManager.SetFullbright(enabled)
     State.Player.Fullbright = enabled
     
+    if State.Connections.FullbrightConnection then
+        State.Connections.FullbrightConnection:Disconnect()
+        State.Connections.FullbrightConnection = nil
+    end
+    
     if enabled then
         State.Connections.FullbrightConnection = game:GetService("RunService").Heartbeat:Connect(function()
             game:GetService("Lighting").Brightness = 2
@@ -344,11 +359,6 @@ function PlayerManager.SetFullbright(enabled)
             game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(128, 128, 128)
         end)
     else
-        if State.Connections.FullbrightConnection then
-            State.Connections.FullbrightConnection:Disconnect()
-            State.Connections.FullbrightConnection = nil
-        end
-        
         game:GetService("Lighting").Brightness = 1
         game:GetService("Lighting").ClockTime = 0
         game:GetService("Lighting").FogEnd = 100000
@@ -461,7 +471,7 @@ ESPTab:CreateToggle({
         State.ESP.Players = value
         
         if State.Connections.PlayerESPConnection then
-            State.Connections.PlayerESPConnection:Disconnect()
+            pcall(function() task.cancel(State.Connections.PlayerESPConnection) end)
             State.Connections.PlayerESPConnection = nil
         end
         
@@ -469,14 +479,15 @@ ESPTab:CreateToggle({
             State.Connections.PlayerESPConnection = task.spawn(function()
                 while State.ESP.Players do
                     for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-                        if player ~= game.Players.LocalPlayer and player.Character and 
-                           not player.Character:FindFirstChildOfClass("Highlight") then
-                            ESPManager.CreateESP(
-                                player.Character, 
-                                CONFIG.ESP.Colors.Players, 
-                                player.Name, 
-                                player.Character:FindFirstChild("Head")
-                            )
+                        if player ~= game.Players.LocalPlayer and player.Character then
+                            if not player.Character:FindFirstChildOfClass("Highlight") then
+                                ESPManager.CreateESP(
+                                    player.Character, 
+                                    CONFIG.ESP.Colors.Players, 
+                                    player.Name, 
+                                    player.Character:FindFirstChild("Head") or player.Character
+                                )
+                            end
                         end
                     end
                     task.wait(CONFIG.ESP.UpdateRate)
@@ -580,6 +591,15 @@ SettingsTab:CreateButton({
         
         if State.Connections.FullbrightConnection then
             State.Connections.FullbrightConnection:Disconnect()
+        end
+        
+        -- Reset player speed
+        local character = game.Players.LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = CONFIG.Player.DefaultSpeed
+            end
         end
         
         Rayfield:Destroy()
