@@ -1,0 +1,529 @@
+-- Wait for game to load
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- Service Handler
+local get_service = setmetatable({}, {
+    __index = function(self, index)
+        return cloneref(game.GetService(game, index))
+    end
+})
+
+-- Services
+local ProximityPromptService = get_service.ProximityPromptService
+local VirtualInputManager = get_service.VirtualInputManager
+local MarketplaceService = get_service.MarketplaceService
+local ReplicatedStorage = get_service.ReplicatedStorage
+local UserInputService = get_service.UserInputService
+local VirtualUser = get_service.VirtualUser
+local RunService = get_service.RunService
+local Workspace = get_service.Workspace
+local Players = get_service.Players
+local Stats = get_service.Stats
+
+-- Game Info
+local GameInfo = MarketplaceService:GetProductInfo(game.PlaceId)
+local LocalPlayer = Players.LocalPlayer
+local Backpack = LocalPlayer.Backpack
+
+-- Executor Check
+if not firesignal then
+    LocalPlayer:Kick("Executor doesn't support firesignal. Please use a better executor.")
+end
+
+-- World Structure Validation
+local World = Workspace:FindFirstChild("World")
+if not World then
+    return LocalPlayer:Kick("World folder not found!")
+end
+
+local NPCs = World:FindFirstChild("NPCs")
+if not NPCs then
+    return LocalPlayer:Kick("NPCs folder not found!")
+end
+
+local Zones = World:FindFirstChild("Zones"):FindFirstChild("_Ambience")
+if not Zones then
+    return LocalPlayer:Kick("Zones folder not found!")
+end
+
+local HoleFolders = World:FindFirstChild("Zones"):FindFirstChild("_NoDig")
+if not HoleFolders then
+    return LocalPlayer:Kick("Holes folder not found!")
+end
+
+local Totems = Workspace:FindFirstChild("Active"):FindFirstChild("Totems")
+if not Totems then
+    return LocalPlayer:Kick("Totems folder not found!")
+end
+
+local Bosses = Workspace:FindFirstChild("Spawns"):FindFirstChild("BossSpawns")
+if not Bosses then
+    return LocalPlayer:Kick("Bosses folder not found!")
+end
+
+-- Configuration Variables
+local Config = {
+    StaffOption = "Notify",
+    DigOption = "Legit",
+    AutoSellDelay = 5,
+    TpWalkSpeed = 10,
+    
+    -- Toggles
+    AutoPizza = false,
+    AntiStaff = false,
+    AutoSell = false,
+    AutoHole = false,
+    InfJump = false,
+    AntiAfk = false,
+    AutoDig = false,
+    TpWalk = false
+}
+
+-- Utility Functions
+local function GetTool()
+    return LocalPlayer.Character:FindFirstChildOfClass("Tool")
+end
+
+local function GetClosestTotem()
+    local ClosestTotem = nil
+    local ShortestDistance = math.huge
+
+    for _, totem in pairs(Totems:GetChildren()) do
+        if totem:GetAttribute("IsActive") then
+            local Distance = (totem:GetPivot().Position - LocalPlayer.Character:GetPivot().Position).Magnitude
+            if Distance < ShortestDistance then
+                ShortestDistance = Distance
+                ClosestTotem = totem
+            end
+        end
+    end
+
+    return ClosestTotem
+end
+
+local function IsStaff(player)
+    local Rank = player:GetRankInGroup(35289532)
+    local Role = player:GetRoleInGroup(35289532)
+    
+    if Rank >= 2 then
+        if Config.StaffOption == "Kick" then
+            LocalPlayer:Kick(Role .. " detected! Username: " .. player.DisplayName)
+        elseif Config.StaffOption == "Notify" then
+            Rayfield:Notify({
+                Title = "Staff Detected!",
+                Content = Role .. " detected! Username: " .. player.DisplayName,
+                Duration = 6.5,
+                Image = 4483362458
+            })
+        end
+    end
+end
+
+-- Initialize Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Kylosilly's Script",
+    LoadingTitle = "Loading Script...",
+    LoadingSubtitle = "by @kylosilly",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "KylosillyScript",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false
+})
+
+-- Create Tabs
+local FarmTab = Window:CreateTab("🚜 Farm", 4483362458)
+local MiscTab = Window:CreateTab("⚙️ Misc", 4483362458)
+local InventoryTab = Window:CreateTab("🎒 Inventory", 4483362458)
+local TeleportTab = Window:CreateTab("🔄 Teleport", 4483362458)
+
+-- Farm Tab
+local DigSection = FarmTab:CreateSection("Dig Settings")
+
+local AutoDigToggle = FarmTab:CreateToggle({
+    Name = "Auto Dig Minigame",
+    CurrentValue = Config.AutoDig,
+    Flag = "AutoDig",
+    Callback = function(Value)
+        Config.AutoDig = Value
+        if Value then
+            if LocalPlayer.PlayerGui:FindFirstChild("Dig") and not Config.AutoPizza then
+                local StrongHit = LocalPlayer.PlayerGui.Dig:FindFirstChild("Safezone"):FindFirstChild("Holder"):FindFirstChild("Area_Strong")
+                local PlayerBar = LocalPlayer.PlayerGui.Dig:FindFirstChild("Safezone"):FindFirstChild("Holder"):FindFirstChild("PlayerBar")
+                local MobileButton = LocalPlayer.PlayerGui.Dig:FindFirstChild("MobileClick")
+                
+                local MinigameConnection = PlayerBar:GetPropertyChangedSignal("Position"):Connect(function()
+                    if not Config.AutoDig then return end
+                    if Config.DigOption == "Legit" and math.abs(PlayerBar.Position.X.Scale - StrongHit.Position.X.Scale) <= 0.04 then
+                        firesignal(MobileButton.Activated)
+                        task.wait()
+                    elseif Config.DigOption == "Blatant" then
+                        PlayerBar.Position = UDim2.new(StrongHit.Position.X.Scale, 0, 0, 0)
+                        firesignal(MobileButton.Activated)
+                        task.wait()
+                    end
+                end)
+            end
+        end
+    end,
+})
+
+local DigMethodDropdown = FarmTab:CreateDropdown({
+    Name = "Dig Method",
+    Options = {"Legit", "Blatant"},
+    CurrentOption = Config.DigOption,
+    Flag = "DigMethod",
+    Callback = function(Option)
+        Config.DigOption = Option
+    end,
+})
+
+local AutoHoleToggle = FarmTab:CreateToggle({
+    Name = "Auto Holes",
+    CurrentValue = Config.AutoHole,
+    Flag = "AutoHoles",
+    Callback = function(Value)
+        Config.AutoHole = Value
+        if Value then
+            spawn(function()
+                repeat
+                    if not Config.AutoPizza then
+                        local Tool = GetTool()
+                        if not Tool or not Tool.Name:find("Shovel") then
+                            for _, item in pairs(Backpack:GetChildren()) do
+                                if item.Name:find("Shovel") then
+                                    item.Parent = LocalPlayer.Character
+                                end
+                            end
+                        end
+                        if HoleFolders:FindFirstChild(LocalPlayer.Name.."_Crater_Hitbox") then
+                            HoleFolders[LocalPlayer.Name.."_Crater_Hitbox"]:Destroy()
+                        end
+                        if not LocalPlayer.PlayerGui:FindFirstChild("Dig") then
+                            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                        end
+                    end
+                    task.wait(0.5)
+                until not Config.AutoHole
+            end)
+        end
+    end,
+})
+
+local FarmSection = FarmTab:CreateSection("Farm Settings")
+
+local AutoPizzaToggle = FarmTab:CreateToggle({
+    Name = "Auto Pizza Delivery",
+    CurrentValue = Config.AutoPizza,
+    Flag = "AutoPizza",
+    Callback = function(Value)
+        Config.AutoPizza = Value
+        if Value then
+            spawn(function()
+                repeat
+                    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Change_Zone"):FireServer("Penguins Pizza")
+                    ReplicatedStorage:WaitForChild("DialogueRemotes"):WaitForChild("StartInfiniteQuest"):InvokeServer("Pizza Penguin")
+                    wait(math.random(1, 3))
+                    LocalPlayer.Character:MoveTo(Workspace:FindFirstChild("Active"):FindFirstChild("PizzaCustomers"):FindFirstChildOfClass("Model"):GetPivot().Position)
+                    wait(math.random(2, 5))
+                    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Quest_DeliverPizza"):InvokeServer()
+                    wait(math.random(1, 3))
+                    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Change_Zone"):FireServer("Penguins Pizza")
+                    ReplicatedStorage:WaitForChild("DialogueRemotes"):WaitForChild("CompleteInfiniteQuest"):InvokeServer("Pizza Penguin")
+                    task.wait(math.random(60, 90))
+                until not Config.AutoPizza
+            end)
+        end
+    end,
+})
+
+-- Misc Tab
+local StaffSection = MiscTab:CreateSection("Staff Settings")
+
+local AntiStaffToggle = MiscTab:CreateToggle({
+    Name = "Anti Staff",
+    CurrentValue = Config.AntiStaff,
+    Flag = "AntiStaff",
+    Callback = function(Value)
+        Config.AntiStaff = Value
+        if Value then
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    IsStaff(player)
+                end
+            end
+        end
+    end,
+})
+
+local StaffMethodDropdown = MiscTab:CreateDropdown({
+    Name = "Staff Detection Method",
+    Options = {"Notify", "Kick"},
+    CurrentOption = Config.StaffOption,
+    Flag = "StaffMethod",
+    Callback = function(Option)
+        Config.StaffOption = Option
+    end,
+})
+
+local AntiAfkSection = MiscTab:CreateSection("Anti AFK Settings")
+
+local AntiAfkToggle = MiscTab:CreateToggle({
+    Name = "Anti AFK",
+    CurrentValue = Config.AntiAfk,
+    Flag = "AntiAfk",
+    Callback = function(Value)
+        Config.AntiAfk = Value
+    end,
+})
+
+local PlayerSection = MiscTab:CreateSection("Player Settings")
+
+local InfJumpToggle = MiscTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = Config.InfJump,
+    Flag = "InfJump",
+    Callback = function(Value)
+        Config.InfJump = Value
+    end,
+})
+
+local TpWalkToggle = MiscTab:CreateToggle({
+    Name = "TP Walk",
+    CurrentValue = Config.TpWalk,
+    Flag = "TpWalk",
+    Callback = function(Value)
+        Config.TpWalk = Value
+    end,
+})
+
+local TpWalkSpeedSlider = MiscTab:CreateSlider({
+    Name = "TP Walk Speed",
+    Range = {1, 100},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = Config.TpWalkSpeed,
+    Flag = "TpWalkSpeed",
+    Callback = function(Value)
+        Config.TpWalkSpeed = Value
+    end,
+})
+
+-- Inventory Tab
+local SellSection = InventoryTab:CreateSection("Sell Settings")
+
+local AutoSellToggle = InventoryTab:CreateToggle({
+    Name = "Auto Sell",
+    CurrentValue = Config.AutoSell,
+    Flag = "AutoSell",
+    Callback = function(Value)
+        Config.AutoSell = Value
+        if Value then
+            spawn(function()
+                repeat
+                    for _, item in pairs(Backpack:GetChildren()) do
+                        ReplicatedStorage:WaitForChild("DialogueRemotes"):WaitForChild("SellHeldItem"):FireServer(item)
+                    end
+                    task.wait(Config.AutoSellDelay)
+                until not Config.AutoSell
+            end)
+        end
+    end,
+})
+
+local AutoSellDelaySlider = InventoryTab:CreateSlider({
+    Name = "Auto Sell Delay",
+    Range = {1, 60},
+    Increment = 1,
+    Suffix = "seconds",
+    CurrentValue = Config.AutoSellDelay,
+    Flag = "AutoSellDelay",
+    Callback = function(Value)
+        Config.AutoSellDelay = Value
+    end,
+})
+
+local SellAllButton = InventoryTab:CreateButton({
+    Name = "Sell All Items",
+    Callback = function()
+        for _, item in pairs(Backpack:GetChildren()) do
+            ReplicatedStorage:WaitForChild("DialogueRemotes"):WaitForChild("SellHeldItem"):FireServer(item)
+        end
+        Rayfield:Notify({
+            Title = "Items Sold",
+            Content = "All items in inventory have been sold!",
+            Duration = 6.5,
+            Image = 4483362458
+        })
+    end,
+})
+
+local SellHeldButton = InventoryTab:CreateButton({
+    Name = "Sell Held Item",
+    Callback = function()
+        local Tool = GetTool()
+        if not Tool then
+            return Rayfield:Notify({
+                Title = "No Tool",
+                Content = "No tool found in hand!",
+                Duration = 6.5,
+                Image = 4483362458
+            })
+        end
+        if not Tool:GetAttribute("InventoryLink") then
+            return Rayfield:Notify({
+                Title = "Cannot Sell",
+                Content = "This item cannot be sold!",
+                Duration = 6.5,
+                Image = 4483362458
+            })
+        end
+        ReplicatedStorage:WaitForChild("DialogueRemotes"):WaitForChild("SellHeldItem"):FireServer(Tool)
+        Rayfield:Notify({
+            Title = "Item Sold",
+            Content = "Held item has been sold!",
+            Duration = 6.5,
+            Image = 4483362458
+        })
+    end,
+})
+
+local JournalSection = InventoryTab:CreateSection("Journal Settings")
+
+local ClaimJournalButton = InventoryTab:CreateButton({
+    Name = "Claim Journal Items",
+    Callback = function()
+        for _, item in pairs(LocalPlayer.PlayerGui:FindFirstChild("HUD"):FindFirstChild("Frame"):FindFirstChild("Journal"):FindFirstChild("Scroller"):GetChildren()) do
+            if item:IsA("ImageButton") and item:FindFirstChild("Discovered").Visible then
+                firesignal(item.MouseButton1Click)
+            end
+        end
+        Rayfield:Notify({
+            Title = "Journal Claimed",
+            Content = "All discovered items have been claimed!",
+            Duration = 6.5,
+            Image = 4483362458
+        })
+    end,
+})
+
+-- Teleport Tab
+local MiscTeleportSection = TeleportTab:CreateSection("Misc Teleports")
+
+local TpMerchantButton = TeleportTab:CreateButton({
+    Name = "Teleport to Merchant",
+    Callback = function()
+        LocalPlayer.Character:MoveTo(NPCs:FindFirstChild("Merchant Cart"):GetPivot().Position)
+    end,
+})
+
+local TpMeteorButton = TeleportTab:CreateButton({
+    Name = "Teleport to Meteor",
+    Callback = function()
+        if Workspace:FindFirstChild("Active"):FindFirstChild("ActiveMeteor") then
+            LocalPlayer.Character:MoveTo(Workspace.Active.ActiveMeteor:GetPivot().Position)
+        else
+            Rayfield:Notify({
+                Title = "No Meteor",
+                Content = "No active meteor found!",
+                Duration = 6.5,
+                Image = 4483362458
+            })
+        end
+    end,
+})
+
+local TpEnchantButton = TeleportTab:CreateButton({
+    Name = "Teleport to Enchantment Altar",
+    Callback = function()
+        LocalPlayer.Character:MoveTo(World:FindFirstChild("Interactive"):FindFirstChild("Enchanting"):FindFirstChild("EnchantmentAltar"):FindFirstChild("EnchantPart"):GetPivot().Position)
+    end,
+})
+
+local TpTotemButton = TeleportTab:CreateButton({
+    Name = "Teleport to Active Totem",
+    Callback = function()
+        local Totem = GetClosestTotem()
+        if not Totem then
+            return Rayfield:Notify({
+                Title = "No Totem",
+                Content = "No active totem found!",
+                Duration = 6.5,
+                Image = 4483362458
+            })
+        end
+        LocalPlayer.Character:MoveTo(Totem:GetPivot().Position)
+    end,
+})
+
+-- Event Connections
+local AntiAfkConnection = LocalPlayer.Idled:Connect(function()
+    if Config.AntiAfk then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+local DigConnection = LocalPlayer.PlayerGui.ChildAdded:Connect(function(gui)
+    if Config.AutoDig and not Config.AutoPizza and gui.Name == "Dig" then
+        local StrongHit = gui:FindFirstChild("Safezone"):FindFirstChild("Holder"):FindFirstChild("Area_Strong")
+        local PlayerBar = gui:FindFirstChild("Safezone"):FindFirstChild("Holder"):FindFirstChild("PlayerBar")
+        local MobileButton = gui:FindFirstChild("MobileClick")
+        
+        local MinigameConnection = PlayerBar:GetPropertyChangedSignal("Position"):Connect(function()
+            if not Config.AutoDig or Config.AutoPizza then return end
+            if Config.DigOption == "Legit" and math.abs(PlayerBar.Position.X.Scale - StrongHit.Position.X.Scale) <= 0.04 then
+                firesignal(MobileButton.Activated)
+                task.wait()
+            elseif Config.DigOption == "Blatant" then
+                PlayerBar.Position = UDim2.new(StrongHit.Position.X.Scale, 0, 0, 0)
+                firesignal(MobileButton.Activated)
+                task.wait()
+            end
+        end)
+    end
+end)
+
+local JumpConnection = UserInputService.JumpRequest:Connect(function()
+    if Config.InfJump and not _G.JumpCooldown then
+        _G.JumpCooldown = true
+        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState("Jumping")
+        wait()
+        _G.JumpCooldown = false
+    end
+end)
+
+local MovementConnection = RunService.Heartbeat:Connect(function()
+    if Config.TpWalk and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        if LocalPlayer.Character.Humanoid.MoveDirection.Magnitude > 0 then
+            LocalPlayer.Character:TranslateBy(LocalPlayer.Character.Humanoid.MoveDirection * Config.TpWalkSpeed / 10)
+        end
+    end
+end)
+
+local PlayerJoinConnection = Players.PlayerAdded:Connect(function(player)
+    if Config.AntiStaff then
+        IsStaff(player)
+    end
+end)
+
+-- Create remote event signature
+Instance.new("RemoteEvent", ReplicatedStorage:FindFirstChild("Remotes")).Name = "bWFkZSBieSBAa3lsb3NpbGx5IG9uIGRpc2NvcmQgPDM"
+
+-- Loading notification
+Rayfield:Notify({
+    Title = "Script Loaded",
+    Content = "Kylosilly's script has been loaded successfully!",
+    Duration = 6.5,
+    Image = 4483362458
+})
