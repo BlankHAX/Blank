@@ -2,7 +2,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local CONFIG = {
     UI = {
-        Name = "Five Nights: Hunted - Mars HUB",
+        Name = "Five Nights: Hunted - Mars HUB | By BlankHAX",
         LoadingTitle = "Five Nights: Hunted",
         LoadingSubtitle = "Script Loading...",
         Theme = "DarkBlue",
@@ -70,6 +70,14 @@ local function GetPlayerPosition()
         return player.Character.HumanoidRootPart.Position
     end
     return nil
+end
+
+local function CopyToClipboard(text)
+    if setclipboard then
+        setclipboard(text)
+    else
+        warn("setclipboard is not supported in this environment.")
+    end
 end
 
 local function GetTargetPosition(target)
@@ -705,6 +713,13 @@ SettingsTab:CreateButton({
         
         Rayfield:Destroy()
     end,
+})
+
+DiscordTab:CreateButton({
+   Name = "Discord Link",
+   Callback = function()
+     CopyToClipboard("https://discord.gg/KHpjtRPY")
+   end,
 })
 
 Rayfield:LoadConfiguration()
