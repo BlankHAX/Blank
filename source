@@ -368,36 +368,90 @@ function PlayerManager.SetFullbright(enabled)
         game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(70, 70, 70)
     end
 end
-
 function PlayerManager.SetAntiFailure(enabled)
+
     State.Player.AntiFailure = enabled
+
     
+
     if State.Connections.AntiFailureConnection then
         State.Connections.AntiFailureConnection:Disconnect()
         State.Connections.AntiFailureConnection = nil
     end
-    
+
     if enabled then
-        State.Connections.AntiFailureConnection = task.spawn(function()
-            while State.Player.AntiFailure do
-                local args = {
-                    {
-                        Offset = nil,
-                        Notes = {},
-                        Beats = {nil, nil, nil},
-                        InitTick = nil,
-                        Passed = {1, 2, 3},
-                        Stats = {Miss = 0, Perfect = 3}
-                    }
-                }
+        State.Connections.AntiFailureConnection = game:GetService("RunService").Heartbeat:Connect(function()
+            -- Fixed Anti-Failure with proper error handling
+            pcall(function()
+               local args = {
+	{
+		Offset = nil,
+		Notes = {},
+		Beats = {
+			nil,
+			nil,
+			nil
+		},
+		InitTick = nil,
+		Passed = {
+			1,
+			2,
+			3
+		},
+		Stats = {
+			Miss = 0,
+			Perfect = 3
+		}
+	}
+}
+
+
                 
-                pcall(function()
-                    game:GetService("ReplicatedStorage").Packages.Knit.Services.TaskService.RE.RepairStatus:FireServer(unpack(args))
-                end)
-                task.wait(0.5) -- Send every 0.5 seconds while active
-            end
+
+                local repairService = game:GetService("ReplicatedStorage"):FindFirstChild("Packages")
+
+                if repairService then
+
+                    repairService = repairService:FindFirstChild("Knit")
+
+                    if repairService then
+
+                        repairService = repairService:FindFirstChild("Services")
+
+                        if repairService then
+
+                            repairService = repairService:FindFirstChild("TaskService")
+
+                            if repairService then
+
+                                repairService = repairService:FindFirstChild("RE")
+
+                                if repairService then
+
+                                    repairService = repairService:FindFirstChild("RepairStatus")
+
+                                    if repairService then
+
+                                        repairService:FireServer(unpack(args))
+
+                                    end
+
+                                end
+
+                            end
+
+                        end
+
+                    end
+
+                end
+
+            end)
+
         end)
+
     end
+
 end
 
 local Window = Rayfield:CreateWindow({
